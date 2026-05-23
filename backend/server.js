@@ -1,78 +1,95 @@
 require('dotenv').config();
 
-const adminRoutes = require('./routes/admin');
-const Message = require('./models/Message');
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const http = require('http');
 
-
 const { Server } = require('socket.io');
 
 const authRoutes = require('./routes/auth');
+const adminRoutes = require('./routes/admin');
+
+const Message = require('./models/Message');
 
 const app = express();
 
 const server = http.createServer(app);
 
+
+// SOCKET.IO
 const io = new Server(server, {
   cors: {
-    origin: [
-      "http://localhost:3000",
-      "https://matscc.vercel.app/"
-    ],
+    origin: "*",
     methods: ["GET", "POST"]
   }
 });
 
 
-// Middleware
-app.use(express.json());
+// MIDDLEWARE
 app.use(cors({
-  origin: [
-    "http://localhost:3000",
-    "https://matscc.vercel.app/"
-  ],
+  origin: "*",
   methods: ["GET", "POST", "PUT"],
-  credentials: true
 }));
 
+app.use(express.json());
 
-// Routes
+
+// ROUTES
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 
 
-// Test route
+// TEST ROUTE
 app.get('/', (req, res) => {
   res.send('Server is running 🚀');
 });
 
 
-// SOCKET.IO
+// SOCKET CONNECTION
 io.on("connection", async (socket) => {
 
   console.log("User connected:", socket.id);
 
-  // SEND OLD MESSAGES
-  const oldMessages = await Message.find().sort({ createdAt: 1 });
+  try {
 
-  socket.emit("load_messages", oldMessages);
+    // LOAD OLD MESSAGES
+    const oldMessages = await Message.find().sort({
+      createdAt: 1
+    });
+
+    socket.emit("load_messages", oldMessages);
+
+  }
+
+  catch(err){
+    console.log(err);
+  }
 
 
-  // RECEIVE NEW MESSAGE
+  // RECEIVE MESSAGE
   socket.on("send_message", async (data) => {
 
-    console.log(data);
+    try {
 
-    // SAVE TO DATABASE
-    const newMessage = await Message.create({
-  text: data.text,
-  username: data.username
-});
-    // SEND TO EVERYONE
-    io.emit("receive_message", newMessage);
+      console.log(data);
+
+      // SAVE MESSAGE
+      const newMessage = await Message.create({
+        text: data.text,
+        username: data.username
+      });
+
+      // SEND TO ALL USERS
+      io.emit("receive_message", newMessage);
+
+    }
+
+    catch(err){
+
+      console.log(err);
+
+    }
 
   });
 
@@ -85,15 +102,16 @@ io.on("connection", async (socket) => {
 
 });
 
-// MongoDB
+
+// DATABASE
 mongoose.connect(process.env.MONGO_URI)
 
 .then(() => {
 
   console.log('MongoDB connected');
 
-  server.listen(5000, () => {
-    console.log('Server running on port 5000');
+  server.listen(process.env.PORT || 5000, () => {
+    console.log('Server running');
   });
 
 })
